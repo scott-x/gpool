@@ -8,15 +8,13 @@ type Worker interface {
 	Do(i interface{})
 }
 
-type Processor struct {
-}
+type processor struct{}
 
 type Pool struct {
-	mu *sync.Mutex
-	// Processors  []*Processor
+	mu          *sync.Mutex
 	max         int
 	wg          sync.WaitGroup
-	ChProcessor chan *Processor
+	chProcessor chan *processor
 }
 
 func Init(max int) *Pool {
@@ -27,11 +25,11 @@ func Init(max int) *Pool {
 		mu:          &sync.Mutex{},
 		max:         max,
 		wg:          sync.WaitGroup{},
-		ChProcessor: make(chan *Processor, max),
+		chProcessor: make(chan *processor, max),
 	}
 
 	for i := 0; i < max; i++ {
-		p.ChProcessor <- &Processor{}
+		p.chProcessor <- &processor{}
 	}
 
 	return p
@@ -42,11 +40,11 @@ func (p *Pool) Do(w Worker, item interface{}) {
 	p.wg.Add(1)
 	go func() {
 		//consume
-		processor := <-p.ChProcessor
+		processor := <-p.chProcessor
 		w.Do(item)
 		p.wg.Done()
 		//send back
-		p.ChProcessor <- processor
+		p.chProcessor <- processor
 	}()
 }
 
