@@ -5,7 +5,7 @@ Library `gpool` implements a goroutine pool with fixed capacity, managing and re
 
 ```bash
 # install
-go get github.com/scott-x/gpool
+go get github.com/scott-x/gpool@latest
 ```
 
 #### Example1: calculate the num from 1 to 100
@@ -33,12 +33,12 @@ func (w *worker) Do(i interface{}) {
 }
 
 func main() {
-	p := gpool.Init(10)
+	p := gpool.New("sum", 10).EnableLogger()
 
 	w := worker{}
 	//calculate the num from 1 to 100
 	for i := 0; i <= 100; i++ {
-		p.Do(&w, i)
+		p.Treat(&w, i)
 	}
 	p.Wait()
 	fmt.Println(sum) //5050
@@ -68,8 +68,7 @@ var (
 	wFile             fileWorker
 )
 
-type dirWorker struct {
-}
+type dirWorker struct{}
 
 type fileWorker struct {
 	mu sync.RWMutex
@@ -83,10 +82,13 @@ func (w *dirWorker) Do(i interface{}) {
 		if name[0] == '.' || name[0] == '_' || name[0] == '$' || name[0] == '~' {
 			continue
 		}
+		if name == "node_modules" {
+			continue
+		}
 		if v.IsDir() {
-			dirPool.Do(&wDir, path.Join(dir, name))
+			dirPool.Treat(&wDir, path.Join(dir, name))
 		} else {
-			filePool.Do(&wFile, path.Join(dir, name))
+			filePool.Treat(&wFile, path.Join(dir, name))
 		}
 	}
 }
@@ -104,16 +106,18 @@ func (w *fileWorker) Do(i interface{}) {
 }
 
 func init() {
-	dirPool = gpool.Init(10)
-	filePool = gpool.Init(20)
-
+	//init pool & worker
+	dirPool = gpool.New("dir", 15) //the logger is disabled by default
+	// dirPool = gpool.New("dir", 15).EnableLogger() //enable logger
 	wDir = dirWorker{}
+
+	filePool = gpool.New("file", 30)
 	wFile = fileWorker{}
 }
 
 func main() {
 	t := time.Now()
-	root := os.Getenv("GOPATH")
+	root := os.Getenv("GOPATH") + "/src/github.com/scott-x"
 	fls, _ := ioutil.ReadDir(root)
 	for _, v := range fls {
 		name := v.Name()
@@ -121,9 +125,9 @@ func main() {
 			continue
 		}
 		if v.IsDir() {
-			dirPool.Do(&wDir, path.Join(root, name))
+			dirPool.Treat(&wDir, path.Join(root, name))
 		} else {
-			filePool.Do(&wFile, path.Join(root, name))
+			filePool.Treat(&wFile, path.Join(root, name))
 		}
 	}
 	filePool.Wait()
