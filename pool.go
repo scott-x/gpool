@@ -1,53 +1,88 @@
 package gpool
 
 import (
+	"log"
 	"sync"
+	"time"
 )
 
 type Worker interface {
-	Do(i interface{})
+	Do(item interface{})
 }
 
-type processor struct{}
+type processor struct {
+	index int
+}
 
 type Pool struct {
-	mu          *sync.Mutex
-	max         int
-	wg          sync.WaitGroup
-	chProcessor chan *processor
+	mu              *sync.RWMutex
+	name            string
+	max             int
+	workingNum      int
+	chProcessor     chan *processor
+	isLoggerEnabled bool
 }
 
-func Init(max int) *Pool {
+func New(name string, max int) *Pool {
 	if max <= 0 {
 		max = 5
 	}
 	p := &Pool{
-		mu:          &sync.Mutex{},
-		max:         max,
-		wg:          sync.WaitGroup{},
-		chProcessor: make(chan *processor, max),
+		mu:              &sync.RWMutex{},
+		name:            name,
+		max:             max,
+		chProcessor:     make(chan *processor, max),
+		isLoggerEnabled: false,
+		workingNum:      0,
 	}
 
 	for i := 0; i < max; i++ {
-		p.chProcessor <- &processor{}
+		p.chProcessor <- &processor{
+			index: i,
+		}
 	}
 
 	return p
 }
 
-func (p *Pool) Do(w Worker, item interface{}) {
+func (p *Pool) EnableLogger() *Pool {
+	p.isLoggerEnabled = true
+	return p
+}
+
+func (p *Pool) Treat(w Worker, item interface{}) {
 	//do sth
-	p.wg.Add(1)
-	go func() {
-		//consume
-		processor := <-p.chProcessor
-		w.Do(item)
-		p.wg.Done()
-		//send back
-		p.chProcessor <- processor
-	}()
+	//consume block
+	processor := <-p.chProcessor
+
+	p.mu.Lock()
+	p.workingNum++
+	p.mu.Unlock()
+
+	if p.isLoggerEnabled {
+		log.Printf("%s_proceessor_%d: %s\n", p.name, processor.index, item.(string))
+	}
+	w.Do(item)
+
+	//send back
+	p.chProcessor <- processor
+
+	p.mu.Lock()
+	p.workingNum--
+	p.mu.Unlock()
 }
 
 func (p *Pool) Wait() {
-	p.wg.Wait()
+	for {
+		var num int
+
+		time.Sleep(time.Second)
+		p.mu.Lock()
+		num = p.workingNum
+		p.mu.Unlock()
+
+		if num == 0 {
+			return
+		}
+	}
 }
