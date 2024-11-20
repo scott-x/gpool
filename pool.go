@@ -60,7 +60,7 @@ func (p *Pool) Treat(w Worker, item interface{}) {
 	p.mu.Unlock()
 
 	if p.isLoggerEnabled {
-		log.Printf("%s_proceessor_%d: %s\n", p.name, processor.index, item.(string))
+		log.Printf("%s_proceessor_%d: %v\n", p.name, processor.index, item)
 	}
 	w.Do(item)
 
